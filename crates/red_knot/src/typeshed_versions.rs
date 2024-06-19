@@ -4,10 +4,9 @@ use std::num::{NonZeroU16, NonZeroUsize};
 use std::ops::{RangeFrom, RangeInclusive};
 use std::str::FromStr;
 
+use ruff_python_stdlib::identifiers::is_identifier;
 use rustc_hash::FxHashMap;
 use smol_str::SmolStr;
-
-use ruff_python_stdlib::identifiers::is_identifier;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct TypeshedVersionsParseError {

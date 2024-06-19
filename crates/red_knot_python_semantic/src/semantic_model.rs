@@ -1,4 +1,4 @@
-use red_knot_module_resolver::Module;
+use red_knot_module_resolver::{resolve_module, Module, ModuleName};
 use ruff_db::vfs::VfsFile;
 use ruff_python_ast as ast;
 use ruff_python_ast::{Expr, ExpressionRef};
@@ -18,6 +18,10 @@ pub struct SemanticModel<'db> {
 impl<'db> SemanticModel<'db> {
     pub fn new(db: &'db dyn Db, file: VfsFile) -> Self {
         Self { db, file }
+    }
+
+    pub fn resolve_module(&self, name: ModuleName) -> Option<Module> {
+        resolve_module(self.db.upcast(), name)
     }
 
     pub fn public_symbol(&self, module: &Module, symbol_name: &str) -> Option<PublicSymbolId<'db>> {

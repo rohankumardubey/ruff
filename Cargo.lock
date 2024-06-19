@@ -480,6 +480,11 @@ name = "countme"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7704b5fdd17b18ae31c4c1da5a2e0305a2bf17b5249300a9ee9ed7b72114c636"
+dependencies = [
+ "dashmap",
+ "once_cell",
+ "rustc-hash",
+]
 
 [[package]]
 name = "crc32fast"
@@ -1967,25 +1972,22 @@ name = "red_knot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bitflags 2.5.0",
+ "camino",
+ "countme",
  "crossbeam",
  "ctrlc",
- "dashmap",
- "hashbrown 0.14.5",
- "indexmap",
  "insta",
- "is-macro",
  "notify",
  "parking_lot",
  "rayon",
  "red_knot_module_resolver",
- "ruff_index",
- "ruff_notebook",
+ "red_knot_python_semantic",
+ "ruff_db",
  "ruff_python_ast",
- "ruff_python_parser",
  "ruff_python_stdlib",
  "ruff_text_size",
  "rustc-hash",
+ "salsa",
  "smol_str",
  "tempfile",
  "tracing",

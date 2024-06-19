@@ -88,6 +88,13 @@ pub struct FileSymbolId {
 }
 
 impl FileSymbolId {
+    pub(crate) fn new(scope: FileScopeId, scoped_symbol_id: ScopedSymbolId) -> Self {
+        Self {
+            scope,
+            scoped_symbol_id,
+        }
+    }
+
     pub fn scope(self) -> FileScopeId {
         self.scope
     }
@@ -115,6 +122,10 @@ impl ScopedSymbolId {
     pub(crate) fn to_public_symbol(self, db: &dyn Db, file: VfsFile) -> PublicSymbolId {
         let symbols = public_symbols_map(db, file);
         symbols.public(self)
+    }
+
+    pub(crate) fn to_file_symbol(self, file: FileScopeId) -> FileSymbolId {
+        FileSymbolId::new(file, self)
     }
 }
 
