@@ -1,0 +1,21 @@
+---
+source: crates/ruff_linter/src/rules/pycodestyle/mod.rs
+---
+E30_syntax_error.py:24:5: E306 [*] Expected 1 blank line before a nested definition, found 0
+   |
+22 |     def nested1():
+23 |         pass
+24 |     def nested2():
+   |     ^^^ E306
+25 |         pass
+   |
+   = help: Add missing blank line
+
+ℹ Safe fix
+21 21 | def top(
+22 22 |     def nested1():
+23 23 |         pass
+   24 |+
+24 25 |     def nested2():
+25 26 |         pass
+26 27 |

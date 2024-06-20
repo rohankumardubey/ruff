@@ -1,0 +1,21 @@
+---
+source: crates/ruff_linter/src/rules/pycodestyle/mod.rs
+---
+E30_syntax_error.py:15:5: E301 [*] Expected 1 blank line, found 0
+   |
+13 |     def __init__(
+14 |         pass
+15 |     def method():
+   |     ^^^ E301
+16 |         pass
+   |
+   = help: Add missing blank line
+
+ℹ Safe fix
+12 12 | class Foo:
+13 13 |     def __init__(
+14 14 |         pass
+   15 |+
+15 16 |     def method():
+16 17 |         pass
+17 18 |

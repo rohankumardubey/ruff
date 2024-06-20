@@ -1,0 +1,67 @@
+---
+source: crates/ruff_linter/src/rules/flake8_implicit_str_concat/mod.rs
+---
+ISC_syntax_error.py:3:1: ISC001 [*] Implicitly concatenated string literals on one line
+  |
+1 | # The lexer doesn't emit a string token if it's unterminated
+2 | "a" "b
+3 | "a" "b" "c
+  | ^^^^^^^ ISC001
+4 | "a" """b
+5 | c""" "d
+  |
+  = help: Combine string literals
+
+ℹ Safe fix
+1 1 | # The lexer doesn't emit a string token if it's unterminated
+2 2 | "a" "b
+3   |-"a" "b" "c
+  3 |+"ab" "c
+4 4 | "a" """b
+5 5 | c""" "d
+6 6 | 
+
+ISC_syntax_error.py:4:1: ISC001 Implicitly concatenated string literals on one line
+  |
+2 |   "a" "b
+3 |   "a" "b" "c
+4 | / "a" """b
+5 | | c""" "d
+  | |____^ ISC001
+6 |   
+7 |   # For f-strings, the `FStringRanges` won't contain the range for
+  |
+  = help: Combine string literals
+
+ISC_syntax_error.py:10:1: ISC001 [*] Implicitly concatenated string literals on one line
+   |
+ 8 | # unterminated f-strings.
+ 9 | f"a" f"b
+10 | f"a" f"b" f"c
+   | ^^^^^^^^^ ISC001
+11 | f"a" f"""b
+12 | c""" f"d {e
+   |
+   = help: Combine string literals
+
+ℹ Safe fix
+7  7  | # For f-strings, the `FStringRanges` won't contain the range for
+8  8  | # unterminated f-strings.
+9  9  | f"a" f"b
+10    |-f"a" f"b" f"c
+   10 |+f"ab" f"c
+11 11 | f"a" f"""b
+12 12 | c""" f"d {e
+13 13 | 
+
+ISC_syntax_error.py:11:1: ISC001 Implicitly concatenated string literals on one line
+   |
+ 9 |   f"a" f"b
+10 |   f"a" f"b" f"c
+11 | / f"a" f"""b
+12 | | c""" f"d {e
+   | |____^ ISC001
+13 |   
+14 |   (
+   |
+   = help: Combine string literals

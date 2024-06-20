@@ -107,7 +107,7 @@ where
 fn extract_noqa_line_for(tokens: &Tokens, locator: &Locator, indexer: &Indexer) -> NoqaMapping {
     let mut string_mappings = Vec::new();
 
-    for token in tokens.up_to_first_unknown() {
+    for token in tokens {
         match token.kind() {
             TokenKind::EndOfFile => {
                 break;

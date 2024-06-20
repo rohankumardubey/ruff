@@ -231,7 +231,7 @@ pub(crate) fn trailing_commas(
     indexer: &Indexer,
 ) {
     let mut fstrings = 0u32;
-    let simple_tokens = tokens.up_to_first_unknown().iter().filter_map(|token| {
+    let simple_tokens = tokens.iter().filter_map(|token| {
         match token.kind() {
             // Completely ignore comments -- they just interfere with the logic.
             TokenKind::Comment => None,
@@ -253,7 +253,11 @@ pub(crate) fn trailing_commas(
                     None
                 }
             }
-            _ => {
+            kind => {
+                if matches!(kind, TokenKind::Newline if fstrings > 0) {
+                    // The parser recovered from an unterminated f-string.
+                    fstrings = 0;
+                }
                 if fstrings == 0 {
                     Some(SimpleToken::from(token.as_tuple()))
                 } else {

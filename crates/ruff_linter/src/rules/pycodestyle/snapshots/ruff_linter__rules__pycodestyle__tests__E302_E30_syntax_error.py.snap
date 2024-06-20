@@ -1,0 +1,21 @@
+---
+source: crates/ruff_linter/src/rules/pycodestyle/mod.rs
+---
+E30_syntax_error.py:7:1: E302 [*] Expected 2 blank lines, found 1
+  |
+5 |     pass
+6 | 
+7 | def bar():
+  | ^^^ E302
+8 |     pass
+  |
+  = help: Add missing blank line(s)
+
+ℹ Safe fix
+4 4 | def foo[T1, T2():
+5 5 |     pass
+6 6 | 
+  7 |+
+7 8 | def bar():
+8 9 |     pass
+9 10 |

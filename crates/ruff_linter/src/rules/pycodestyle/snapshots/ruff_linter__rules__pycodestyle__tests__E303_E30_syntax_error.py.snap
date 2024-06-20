@@ -1,0 +1,20 @@
+---
+source: crates/ruff_linter/src/rules/pycodestyle/mod.rs
+---
+E30_syntax_error.py:12:1: E303 [*] Too many blank lines (3)
+   |
+12 | class Foo:
+   | ^^^^^ E303
+13 |     def __init__(
+14 |         pass
+   |
+   = help: Remove extraneous blank line(s)
+
+ℹ Safe fix
+8  8  |     pass
+9  9  | 
+10 10 | 
+11    |-
+12 11 | class Foo:
+13 12 |     def __init__(
+14 13 |         pass
