@@ -1,31 +1,19 @@
+use crate::node_key::NodeKey;
 use crate::semantic_index::ast_ids::{
-    ScopedClassId, ScopedExpressionId, ScopedFunctionId, ScopedStatementId,
+    ScopedClassId, ScopedDefinitionNodeId, ScopedExpressionId, ScopedFunctionId,
 };
+use ruff_python_ast as ast;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Definition {
-    Import(ImportDefinition),
-    ImportFrom(ImportFromDefinition),
+    ImportAlias(ScopedDefinitionNodeId),
     ClassDef(ScopedClassId),
     FunctionDef(ScopedFunctionId),
-    Assignment(ScopedStatementId),
-    AnnotatedAssignment(ScopedStatementId),
+    Target(ScopedExpressionId),
     NamedExpr(ScopedExpressionId),
     /// represents the implicit initial definition of every name as "unbound"
     Unbound,
     // TODO with statements, except handlers, function args...
-}
-
-impl From<ImportDefinition> for Definition {
-    fn from(value: ImportDefinition) -> Self {
-        Self::Import(value)
-    }
-}
-
-impl From<ImportFromDefinition> for Definition {
-    fn from(value: ImportFromDefinition) -> Self {
-        Self::ImportFrom(value)
-    }
 }
 
 impl From<ScopedClassId> for Definition {
@@ -40,18 +28,27 @@ impl From<ScopedFunctionId> for Definition {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ImportDefinition {
-    pub(crate) import_id: ScopedStatementId,
-
-    /// Index into [`ruff_python_ast::StmtImport::names`].
-    pub(crate) alias: u32,
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Debug)]
+pub(crate) enum DefinitionNodeKey {
+    Function(NodeKey),
+    Class(NodeKey),
+    Alias(NodeKey),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub struct ImportFromDefinition {
-    pub(crate) import_id: ScopedStatementId,
+impl From<&ast::StmtFunctionDef> for DefinitionNodeKey {
+    fn from(value: &ast::StmtFunctionDef) -> Self {
+        Self::Function(NodeKey::from_node(value))
+    }
+}
 
-    /// Index into [`ruff_python_ast::StmtImportFrom::names`].
-    pub(crate) name: u32,
+impl From<&ast::StmtClassDef> for DefinitionNodeKey {
+    fn from(value: &ast::StmtClassDef) -> Self {
+        Self::Class(NodeKey::from_node(value))
+    }
+}
+
+impl From<&ast::Alias> for DefinitionNodeKey {
+    fn from(value: &ast::Alias) -> Self {
+        Self::Alias(NodeKey::from_node(value))
+    }
 }

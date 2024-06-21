@@ -11,7 +11,7 @@ use ruff_python_ast::{ExprContext, TypeParams};
 
 use crate::name::Name;
 use crate::semantic_index::ast_ids::{HasScopedAstId, ScopedExpressionId};
-use crate::semantic_index::definition::{Definition, ImportDefinition, ImportFromDefinition};
+use crate::semantic_index::definition::Definition;
 use crate::semantic_index::symbol::{FileScopeId, ScopeId, ScopedSymbolId, SymbolTable};
 use crate::semantic_index::{symbol_table, SemanticIndex};
 use crate::types::{
@@ -281,15 +281,14 @@ impl<'db> TypeInferenceBuilder<'db> {
         let value_ty = self.infer_expression(value);
 
         for target in targets {
+            let target_id = target.scoped_ast_id(self.db, self.scope);
+
             self.infer_expression(target);
+
+            self.types
+                .definition_tys
+                .insert(Definition::Target(target_id), value_ty);
         }
-
-        let assign_id = assignment.scoped_ast_id(self.db, self.scope);
-
-        // TODO: Handle multiple targets.
-        self.types
-            .definition_tys
-            .insert(Definition::Assignment(assign_id), value_ty);
     }
 
     fn infer_annotated_assignment_statement(&mut self, assignment: &ast::StmtAnnAssign) {
@@ -308,10 +307,11 @@ impl<'db> TypeInferenceBuilder<'db> {
         let annotation_ty = self.infer_expression(annotation);
         self.infer_expression(target);
 
-        self.types.definition_tys.insert(
-            Definition::AnnotatedAssignment(assignment.scoped_ast_id(self.db, self.scope)),
-            annotation_ty,
-        );
+        let target_id = target.scoped_ast_id(self.db, self.scope);
+
+        self.types
+            .definition_tys
+            .insert(Definition::Target(target_id), annotation_ty);
     }
 
     fn infer_for_statement(&mut self, for_statement: &ast::StmtFor) {
@@ -333,9 +333,7 @@ impl<'db> TypeInferenceBuilder<'db> {
     fn infer_import_statement(&mut self, import: &ast::StmtImport) {
         let ast::StmtImport { range: _, names } = import;
 
-        let import_id = import.scoped_ast_id(self.db, self.scope);
-
-        for (i, alias) in names.iter().enumerate() {
+        for alias in names {
             let ast::Alias {
                 range: _,
                 name,
@@ -348,13 +346,11 @@ impl<'db> TypeInferenceBuilder<'db> {
                 .map(|module| self.typing_context().module_ty(module.file()))
                 .unwrap_or(Type::Unknown);
 
-            self.types.definition_tys.insert(
-                Definition::Import(ImportDefinition {
-                    import_id,
-                    alias: u32::try_from(i).unwrap(),
-                }),
-                module_ty,
-            );
+            let definition_id = alias.scoped_ast_id(self.db, self.scope);
+
+            self.types
+                .definition_tys
+                .insert(Definition::ImportAlias(definition_id), module_ty);
         }
     }
 
@@ -366,7 +362,6 @@ impl<'db> TypeInferenceBuilder<'db> {
             level: _,
         } = import;
 
-        let import_id = import.scoped_ast_id(self.db, self.scope);
         let module_name = ModuleName::new(module.as_deref().expect("Support relative imports"));
 
         let module =
@@ -375,7 +370,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             .map(|module| self.typing_context().module_ty(module.file()))
             .unwrap_or(Type::Unknown);
 
-        for (i, alias) in names.iter().enumerate() {
+        for alias in names {
             let ast::Alias {
                 range: _,
                 name,
@@ -386,13 +381,11 @@ impl<'db> TypeInferenceBuilder<'db> {
                 .member(&self.typing_context(), &Name::new(&name.id))
                 .unwrap_or(Type::Unknown);
 
-            self.types.definition_tys.insert(
-                Definition::ImportFrom(ImportFromDefinition {
-                    import_id,
-                    name: u32::try_from(i).unwrap(),
-                }),
-                ty,
-            );
+            let definition_id = alias.scoped_ast_id(self.db, self.scope);
+
+            self.types
+                .definition_tys
+                .insert(Definition::ImportAlias(definition_id), ty);
         }
     }
 

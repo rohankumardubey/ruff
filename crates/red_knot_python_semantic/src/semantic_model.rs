@@ -1,12 +1,12 @@
 use red_knot_module_resolver::Module;
 use ruff_db::vfs::VfsFile;
 use ruff_python_ast as ast;
-use ruff_python_ast::{Expr, ExpressionRef, StmtClassDef};
+use ruff_python_ast::{Expr, ExpressionRef};
 
 use crate::semantic_index::ast_ids::HasScopedAstId;
-use crate::semantic_index::definition::Definition;
+use crate::semantic_index::definition::{Definition, DefinitionNodeKey};
 use crate::semantic_index::symbol::PublicSymbolId;
-use crate::semantic_index::{public_symbol, semantic_index, NodeWithScopeKey};
+use crate::semantic_index::{public_symbol, semantic_index};
 use crate::types::{infer_types, public_symbol_ty, Type, TypingContext};
 use crate::Db;
 
@@ -139,7 +139,7 @@ impl HasTy for ast::Expr {
 impl HasTy for ast::StmtFunctionDef {
     fn ty<'db>(&self, model: &SemanticModel<'db>) -> Type<'db> {
         let index = semantic_index(model.db, model.file);
-        let definition_scope = index.definition_scope(NodeWithScopeKey::from(self));
+        let definition_scope = index.definition_defined_in_scope(DefinitionNodeKey::from(self));
 
         let scope = definition_scope.to_scope_id(model.db, model.file);
 
@@ -150,14 +150,27 @@ impl HasTy for ast::StmtFunctionDef {
     }
 }
 
-impl HasTy for StmtClassDef {
+impl HasTy for ast::StmtClassDef {
     fn ty<'db>(&self, model: &SemanticModel<'db>) -> Type<'db> {
         let index = semantic_index(model.db, model.file);
-        let definition_scope = index.definition_scope(NodeWithScopeKey::from(self));
+        let definition_scope = index.definition_defined_in_scope(self);
         let scope = definition_scope.to_scope_id(model.db, model.file);
 
         let types = infer_types(model.db, scope);
         let definition = Definition::ClassDef(self.scoped_ast_id(model.db, scope));
+
+        types.definition_ty(definition)
+    }
+}
+
+impl HasTy for ast::Alias {
+    fn ty<'db>(&self, model: &SemanticModel<'db>) -> Type<'db> {
+        let index = semantic_index(model.db, model.file);
+        let definition_scope = index.definition_defined_in_scope(self);
+        let scope = definition_scope.to_scope_id(model.db, model.file);
+
+        let types = infer_types(model.db, scope);
+        let definition = Definition::ImportAlias(self.scoped_ast_id(model.db, scope));
 
         types.definition_ty(definition)
     }

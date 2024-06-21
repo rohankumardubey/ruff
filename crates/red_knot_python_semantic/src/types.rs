@@ -144,7 +144,7 @@ impl<'db> Type<'db> {
             Type::Any => Some(Type::Any),
             Type::Never => todo!("attribute lookup on Never type"),
             Type::Unknown => Some(Type::Unknown),
-            Type::Unbound => todo!("attribute lookup on Unbound type"),
+            Type::Unbound => None,
             Type::None => todo!("attribute lookup on None type"),
             Type::Function(_) => todo!("attribute lookup on Function type"),
             Type::Module(module) => module.member(context, name),

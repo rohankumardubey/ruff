@@ -11,6 +11,7 @@ use ruff_python_ast as ast;
 use crate::node_key::NodeKey;
 use crate::semantic_index::ast_ids::{AstId, AstIds, ScopedClassId, ScopedFunctionId};
 use crate::semantic_index::builder::SemanticIndexBuilder;
+use crate::semantic_index::definition::DefinitionNodeKey;
 use crate::semantic_index::symbol::{
     FileScopeId, PublicSymbolId, Scope, ScopeId, ScopeKind, ScopedSymbolId, SymbolTable,
 };
@@ -83,8 +84,11 @@ pub struct SemanticIndex {
     /// an [`ast::Expr`] to an [`ExpressionId`] (which requires knowing the scope).
     scopes_by_expression: FxHashMap<NodeKey, FileScopeId>,
 
-    /// Map from nodes that introduce a scope to the scope they define.
-    scopes_by_node: FxHashMap<NodeWithScopeKey, FileScopeId>,
+    /// Map from definitions to their scope. The scope depends on whether the definition introduces a scope or not.
+    ///
+    /// * introduce a scope: The scope that the definition introduces
+    /// * other definitions: The enclosing scope
+    scopes_by_definition: FxHashMap<DefinitionNodeKey, FileScopeId>,
 
     /// Lookup table to map between node ids and ast nodes.
     ///
@@ -158,11 +162,11 @@ impl SemanticIndex {
     }
 
     /// Returns the scope that is created by `node`.
-    pub(crate) fn node_scope(&self, node: impl Into<NodeWithScopeKey>) -> FileScopeId {
-        self.scopes_by_node[&node.into()]
+    pub(crate) fn node_scope(&self, node: impl Into<DefinitionNodeKey>) -> FileScopeId {
+        self.scopes_by_definition[&node.into()]
     }
 
-    /// Returns the scope in which `node_with_scope` is defined.
+    /// Returns the scope in which `definition` is defined.
     ///
     /// The returned `scope` can be used to lookup the symbol of the definition,
     /// or its type.
@@ -171,17 +175,16 @@ impl SemanticIndex {
     /// * Function and classes: Returns the parent scope, unless it is a type parameters scope.
     ///   In this case, the grandparent scope (of the enclosing function, class, or module)
     ///   is returned.
-    pub(crate) fn definition_scope(
+    pub(crate) fn definition_defined_in_scope(
         &self,
-        node_with_scope: impl Into<NodeWithScopeKey>,
+        definition: impl Into<DefinitionNodeKey>,
     ) -> FileScopeId {
-        let scope_id = self.scopes_by_node[&node_with_scope.into()];
-        let scope = self.scope(scope_id);
+        let definition = definition.into();
+        let scope_id = self.node_scope(definition);
 
-        match scope.kind() {
-            ScopeKind::Module => scope_id,
-            ScopeKind::Annotation => scope.parent.unwrap(),
-            ScopeKind::Class | ScopeKind::Function => {
+        match definition {
+            DefinitionNodeKey::Alias(_) => scope_id,
+            DefinitionNodeKey::Class(_) | DefinitionNodeKey::Function(_) => {
                 // SAFETY: A function always has either an enclosing module, function or class scope.
                 let mut ancestors = self.ancestor_scopes(scope_id).skip(1);
                 let (mut definition_scope_id, mut definition_scope) = ancestors.next().unwrap();
@@ -299,33 +302,6 @@ pub(crate) enum NodeWithScopeId {
     ClassTypeParams(AstId<ScopedClassId>),
     Function(AstId<ScopedFunctionId>),
     FunctionTypeParams(AstId<ScopedFunctionId>),
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
-pub(crate) struct NodeWithScopeKey(NodeKey);
-
-impl From<&ast::StmtClassDef> for NodeWithScopeKey {
-    fn from(node: &ast::StmtClassDef) -> Self {
-        Self(NodeKey::from_node(node))
-    }
-}
-
-impl From<&ast::StmtFunctionDef> for NodeWithScopeKey {
-    fn from(value: &ast::StmtFunctionDef) -> Self {
-        Self(NodeKey::from_node(value))
-    }
-}
-
-impl From<&ast::TypeParams> for NodeWithScopeKey {
-    fn from(value: &ast::TypeParams) -> Self {
-        Self(NodeKey::from_node(value))
-    }
-}
-
-impl From<&ast::ModModule> for NodeWithScopeKey {
-    fn from(value: &ast::ModModule) -> Self {
-        Self(NodeKey::from_node(value))
-    }
 }
 
 #[cfg(test)]
