@@ -83,14 +83,14 @@ pub struct SemanticIndex {
     /// an [`ast::Expr`] to an [`ExpressionId`] (which requires knowing the scope).
     scopes_by_expression: FxHashMap<NodeKey, FileScopeId>,
 
+    /// Map from nodes that introduce a scope to the scope they define.
+    scopes_by_node: FxHashMap<NodeWithScopeKey, FileScopeId>,
+
     /// Lookup table to map between node ids and ast nodes.
     ///
     /// Note: We should not depend on this map when analysing other files or
     /// changing a file invalidates all dependents.
     ast_ids: IndexVec<FileScopeId, AstIds>,
-
-    /// Map from nodes that introduce a scope to the scope they define.
-    scopes_by_node: FxHashMap<NodeWithScopeKey, FileScopeId>,
 }
 
 impl SemanticIndex {

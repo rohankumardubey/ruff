@@ -12,7 +12,7 @@ use crate::node_key::NodeKey;
 use crate::semantic_index::ast_ids::{AstId, AstIdsBuilder, ScopedClassId, ScopedFunctionId};
 use crate::semantic_index::definition::{Definition, ImportDefinition, ImportFromDefinition};
 use crate::semantic_index::symbol::{
-    FileScopeId, FileSymbolId, Scope, ScopeKind, ScopedSymbolId, SymbolFlags, SymbolTableBuilder,
+    FileScopeId, Scope, ScopeKind, ScopedSymbolId, SymbolFlags, SymbolTableBuilder,
 };
 use crate::semantic_index::{NodeWithScopeId, NodeWithScopeKey, SemanticIndex};
 
@@ -27,8 +27,8 @@ pub(super) struct SemanticIndexBuilder<'a> {
     scopes: IndexVec<FileScopeId, Scope>,
     symbol_tables: IndexVec<FileScopeId, SymbolTableBuilder>,
     ast_ids: IndexVec<FileScopeId, AstIdsBuilder>,
-    expression_scopes: FxHashMap<NodeKey, FileScopeId>,
-    node_scopes: FxHashMap<NodeWithScopeKey, FileScopeId>,
+    scopes_by_expression: FxHashMap<NodeKey, FileScopeId>,
+    scopes_by_node: FxHashMap<NodeWithScopeKey, FileScopeId>,
 }
 
 impl<'a> SemanticIndexBuilder<'a> {
@@ -41,8 +41,8 @@ impl<'a> SemanticIndexBuilder<'a> {
             scopes: IndexVec::new(),
             symbol_tables: IndexVec::new(),
             ast_ids: IndexVec::new(),
-            expression_scopes: FxHashMap::default(),
-            node_scopes: FxHashMap::default(),
+            scopes_by_expression: FxHashMap::default(),
+            scopes_by_node: FxHashMap::default(),
         };
 
         builder.push_scope_with_parent(
@@ -71,14 +71,12 @@ impl<'a> SemanticIndexBuilder<'a> {
 
     fn push_scope_with_parent(&mut self, node: NodeWithScope, parent: Option<FileScopeId>) {
         let children_start = self.scopes.next_index() + 1;
-        let node_key = node.key();
-        let node_id = node.id();
         let scope_kind = node.scope_kind();
 
         let scope = Scope {
             name: node.name,
             parent,
-            node: node_id,
+            node: node.id,
             kind: scope_kind,
             descendents: children_start..children_start,
         };
@@ -89,7 +87,7 @@ impl<'a> SemanticIndexBuilder<'a> {
 
         debug_assert_eq!(ast_id_scope, scope_id);
         self.scope_stack.push(scope_id);
-        self.node_scopes.insert(node_key, scope_id);
+        self.scopes_by_node.insert(node.key, scope_id);
     }
 
     fn pop_scope(&mut self) -> FileScopeId {
@@ -110,24 +108,14 @@ impl<'a> SemanticIndexBuilder<'a> {
         &mut self.ast_ids[scope_id]
     }
 
-    fn add_or_update_symbol(&mut self, name: Name, flags: SymbolFlags) -> FileSymbolId {
-        for scope in self.scope_stack.iter().rev().skip(1) {
-            let builder = &self.symbol_tables[*scope];
-
-            if let Some(symbol) = builder.symbol_by_name(&name) {
-                return FileSymbolId::new(*scope, symbol);
-            }
-        }
-
-        let scope = self.current_scope();
+    fn add_or_update_symbol(&mut self, name: Name, flags: SymbolFlags) -> ScopedSymbolId {
         let symbol_table = self.current_symbol_table();
-        FileSymbolId::new(scope, symbol_table.add_or_update_symbol(name, flags, None))
+        symbol_table.add_or_update_symbol(name, flags, None)
     }
 
     fn add_or_update_symbol_with_definition(
         &mut self,
         name: Name,
-
         definition: Definition,
     ) -> ScopedSymbolId {
         let symbol_table = self.current_symbol_table();
@@ -194,14 +182,14 @@ impl<'a> SemanticIndexBuilder<'a> {
         self.scopes.shrink_to_fit();
         ast_ids.shrink_to_fit();
         symbol_tables.shrink_to_fit();
-        self.expression_scopes.shrink_to_fit();
+        self.scopes_by_expression.shrink_to_fit();
 
         SemanticIndex {
             symbol_tables,
             scopes: self.scopes,
-            scopes_by_node: self.node_scopes,
+            scopes_by_node: self.scopes_by_node,
             ast_ids,
-            scopes_by_expression: self.expression_scopes,
+            scopes_by_expression: self.scopes_by_expression,
         }
     }
 }
@@ -217,11 +205,18 @@ impl Visitor<'_> for SemanticIndexBuilder<'_> {
         };
         match stmt {
             ast::Stmt::FunctionDef(function_def) => {
+                let function_id = ScopedFunctionId(statement_id);
+                let name = Name::new(&function_def.name.id);
+
+                self.add_or_update_symbol_with_definition(
+                    name.clone(),
+                    Definition::FunctionDef(function_id),
+                );
+
                 for decorator in &function_def.decorator_list {
                     self.visit_decorator(decorator);
                 }
-                let name = Name::new(&function_def.name.id);
-                let function_id = ScopedFunctionId(statement_id);
+
                 let scope = self.current_scope();
 
                 self.with_type_params(
@@ -247,12 +242,14 @@ impl Visitor<'_> for SemanticIndexBuilder<'_> {
                 );
             }
             ast::Stmt::ClassDef(class) => {
+                let class_id = ScopedClassId(statement_id);
+                let name = Name::new(&class.name.id);
+                self.add_or_update_symbol_with_definition(name.clone(), Definition::from(class_id));
+
                 for decorator in &class.decorator_list {
                     self.visit_decorator(decorator);
                 }
 
-                let name = Name::new(&class.name.id);
-                let class_id = ScopedClassId(statement_id);
                 let scope = self.current_scope();
                 self.with_type_params(
                     name.clone(),
@@ -334,7 +331,7 @@ impl Visitor<'_> for SemanticIndexBuilder<'_> {
             self.current_ast_ids().record_expression(expr, module)
         };
 
-        self.expression_scopes
+        self.scopes_by_expression
             .insert(NodeKey::from_node(expr), self.current_scope());
 
         match expr {
@@ -430,14 +427,6 @@ impl NodeWithScope {
             key: node.into(),
             name,
         }
-    }
-
-    fn id(&self) -> NodeWithScopeId {
-        self.id
-    }
-
-    fn key(&self) -> NodeWithScopeKey {
-        self.key
     }
 
     fn scope_kind(&self) -> ScopeKind {

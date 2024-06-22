@@ -1,4 +1,4 @@
-use red_knot_module_resolver::{resolve_module, Module, ModuleName};
+use red_knot_module_resolver::Module;
 use ruff_db::vfs::VfsFile;
 use ruff_python_ast as ast;
 use ruff_python_ast::{Expr, ExpressionRef, StmtClassDef};
@@ -18,10 +18,6 @@ pub struct SemanticModel<'db> {
 impl<'db> SemanticModel<'db> {
     pub fn new(db: &'db dyn Db, file: VfsFile) -> Self {
         Self { db, file }
-    }
-
-    pub fn resolve_module(&self, module_name: ModuleName) -> Option<Module> {
-        resolve_module(self.db.upcast(), module_name)
     }
 
     pub fn public_symbol(&self, module: &Module, symbol_name: &str) -> Option<PublicSymbolId<'db>> {
@@ -142,11 +138,11 @@ impl HasTy for ast::StmtFunctionDef {
         let definition_scope = index.definition_scope(NodeWithScopeKey::from(self));
 
         // SAFETY: A function always has either an enclosing module, function or class scope.
-        let mut parent_scope_id = index.parent_scope_id(definition_scope).unwrap();
-        let parent_scope = index.scope(parent_scope_id);
+        let mut ancestors = index.ancestor_scopes(definition_scope);
+        let (mut parent_scope_id, parent_scope) = ancestors.next().unwrap();
 
         if parent_scope.kind() == ScopeKind::Annotation {
-            parent_scope_id = index.parent_scope_id(parent_scope_id).unwrap();
+            (parent_scope_id, _) = ancestors.next().unwrap();
         }
 
         let scope = parent_scope_id.to_scope_id(model.db, model.file);
@@ -165,11 +161,11 @@ impl HasTy for StmtClassDef {
         let definition_scope = index.definition_scope(NodeWithScopeKey::from(self));
 
         // SAFETY: A class always has either an enclosing module, function or class scope.
-        let mut parent_scope_id = index.parent_scope_id(definition_scope).unwrap();
-        let parent_scope = index.scope(parent_scope_id);
+        let mut ancestors = index.ancestor_scopes(definition_scope);
+        let (mut parent_scope_id, parent_scope) = ancestors.next().unwrap();
 
         if parent_scope.kind() == ScopeKind::Annotation {
-            parent_scope_id = index.parent_scope_id(parent_scope_id).unwrap();
+            (parent_scope_id, _) = ancestors.next().unwrap();
         }
 
         let scope = parent_scope_id.to_scope_id(model.db, model.file);

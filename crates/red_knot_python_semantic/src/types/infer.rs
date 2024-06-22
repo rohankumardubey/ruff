@@ -544,6 +544,12 @@ impl<'db> TypeInferenceBuilder<'db> {
                         let symbol_table = symbol_table(self.db, ancestor_scope);
 
                         if let Some(symbol_id) = symbol_table.symbol_id_by_name(id) {
+                            let symbol = symbol_table.symbol(symbol_id);
+
+                            if !symbol.is_defined() {
+                                continue;
+                            }
+
                             let types = infer_types(self.db, ancestor_scope);
                             return types.symbol_ty(symbol_id);
                         }
