@@ -89,9 +89,6 @@ pub struct SemanticIndex {
     /// changing a file invalidates all dependents.
     ast_ids: IndexVec<FileScopeId, AstIds>,
 
-    /// Map from scope to the node that introduces the scope.
-    nodes_by_scope: IndexVec<FileScopeId, NodeWithScopeId>,
-
     /// Map from nodes that introduce a scope to the scope they define.
     scopes_by_node: FxHashMap<NodeWithScopeKey, FileScopeId>,
 }
@@ -157,10 +154,6 @@ impl SemanticIndex {
     /// Returns an iterator over all ancestors of `scope`, starting with `scope` itself.
     pub(crate) fn ancestor_scopes(&self, scope: FileScopeId) -> AncestorsIter {
         AncestorsIter::new(self, scope)
-    }
-
-    pub(crate) fn scope_node(&self, scope_id: FileScopeId) -> NodeWithScopeId {
-        self.nodes_by_scope[scope_id]
     }
 
     pub(crate) fn definition_scope(

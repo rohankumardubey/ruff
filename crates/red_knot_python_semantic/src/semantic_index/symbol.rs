@@ -11,7 +11,7 @@ use ruff_index::{newtype_index, IndexVec};
 
 use crate::name::Name;
 use crate::semantic_index::definition::Definition;
-use crate::semantic_index::{root_scope, semantic_index, symbol_table, SymbolMap};
+use crate::semantic_index::{root_scope, semantic_index, symbol_table, NodeWithScopeId, SymbolMap};
 use crate::Db;
 
 #[derive(Eq, PartialEq, Debug)]
@@ -217,8 +217,7 @@ impl FileScopeId {
 pub struct Scope {
     pub(super) name: Name,
     pub(super) parent: Option<FileScopeId>,
-    pub(super) definition: Option<Definition>,
-    pub(super) defining_symbol: Option<FileSymbolId>,
+    pub(super) node: NodeWithScopeId,
     pub(super) kind: ScopeKind,
     pub(super) descendents: Range<FileScopeId>,
 }
@@ -228,12 +227,9 @@ impl Scope {
         &self.name
     }
 
-    pub fn definition(&self) -> Option<Definition> {
-        self.definition
-    }
-
-    pub fn defining_symbol(&self) -> Option<FileSymbolId> {
-        self.defining_symbol
+    /// The node that created the scope.
+    pub(crate) fn node(&self) -> NodeWithScopeId {
+        self.node
     }
 
     pub fn parent(self) -> Option<FileScopeId> {
