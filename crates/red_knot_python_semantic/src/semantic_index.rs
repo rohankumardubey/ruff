@@ -12,7 +12,7 @@ use crate::node_key::NodeKey;
 use crate::semantic_index::ast_ids::{AstId, AstIds, ScopedClassId, ScopedFunctionId};
 use crate::semantic_index::builder::SemanticIndexBuilder;
 use crate::semantic_index::symbol::{
-    FileScopeId, PublicSymbolId, Scope, ScopeId, ScopedSymbolId, SymbolTable,
+    FileScopeId, PublicSymbolId, Scope, ScopeId, ScopeKind, ScopedSymbolId, SymbolTable,
 };
 use crate::Db;
 
@@ -147,6 +147,7 @@ impl SemanticIndex {
     }
 
     /// Returns an iterator over the direct child scopes of `scope`.
+    #[allow(unused)]
     pub(crate) fn child_scopes(&self, scope: FileScopeId) -> ChildrenIter {
         ChildrenIter::new(self, scope)
     }
@@ -156,11 +157,44 @@ impl SemanticIndex {
         AncestorsIter::new(self, scope)
     }
 
+    /// Returns the scope that is created by `node`.
+    pub(crate) fn node_scope(&self, node: impl Into<NodeWithScopeKey>) -> FileScopeId {
+        self.scopes_by_node[&node.into()]
+    }
+
+    /// Returns the scope in which `node_with_scope` is defined.
+    ///
+    /// The returned `scope` can be used to lookup the symbol of the definition,
+    /// or its type.
+    ///
+    /// * Annotation: Return's the direct parent scope.
+    /// * Function and classes: Returns the parent scope, unless it is a type parameters scope.
+    ///   In this case, the grandparent scope (of the enclosing function, class, or module)
+    ///   is returned.
     pub(crate) fn definition_scope(
         &self,
         node_with_scope: impl Into<NodeWithScopeKey>,
     ) -> FileScopeId {
-        self.scopes_by_node[&node_with_scope.into()]
+        let scope_id = self.scopes_by_node[&node_with_scope.into()];
+        let scope = self.scope(scope_id);
+
+        match scope.kind() {
+            ScopeKind::Module => scope_id,
+            ScopeKind::Annotation => scope.parent.unwrap(),
+            ScopeKind::Class | ScopeKind::Function => {
+                // SAFETY: A function always has either an enclosing module, function or class scope.
+                let mut ancestors = self.ancestor_scopes(scope_id).skip(1);
+                let (mut definition_scope_id, mut definition_scope) = ancestors.next().unwrap();
+
+                if definition_scope.kind() == ScopeKind::Annotation {
+                    (definition_scope_id, definition_scope) = ancestors.next().unwrap();
+                }
+
+                debug_assert_ne!(definition_scope.kind(), ScopeKind::Annotation);
+
+                definition_scope_id
+            }
+        }
     }
 }
 

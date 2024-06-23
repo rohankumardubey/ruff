@@ -77,7 +77,7 @@ pub trait HasScopedAstId {
     ///
     /// ## Panics
     /// Panics if the node doesn't belong to `file` or is outside `scope`.
-    fn scoped_ast_id(&self, db: &dyn Db, file: VfsFile, scope: FileScopeId) -> Self::Id;
+    fn scoped_ast_id(&self, db: &dyn Db, scope: ScopeId) -> Self::Id;
 }
 
 /// Node that can be uniquely identified by an id in a [`FileScopeId`].
@@ -100,7 +100,7 @@ pub trait AstIdNode {
     /// ## Panics
     /// May panic if the node does not belongs to `file`'s AST or is outside of `scope`. It may also
     /// return an incorrect node if that's the case.
-    fn ast_id(&self, db: &dyn Db, file: VfsFile, scope: FileScopeId) -> AstId<Self::ScopeId>;
+    fn ast_id(&self, db: &dyn Db, scope: ScopeId) -> AstId<Self::ScopeId>;
 
     /// Resolves the AST node for `id`.
     ///
@@ -118,9 +118,12 @@ where
 {
     type ScopeId = T::Id;
 
-    fn ast_id(&self, db: &dyn Db, file: VfsFile, scope: FileScopeId) -> AstId<Self::ScopeId> {
-        let in_scope_id = self.scoped_ast_id(db, file, scope);
-        AstId { scope, in_scope_id }
+    fn ast_id(&self, db: &dyn Db, scope: ScopeId) -> AstId<Self::ScopeId> {
+        let in_scope_id = self.scoped_ast_id(db, scope);
+        AstId {
+            scope: scope.file_scope_id(db),
+            in_scope_id,
+        }
     }
 
     fn lookup(db: &dyn Db, file: VfsFile, id: AstId<Self::ScopeId>) -> &Self
@@ -157,14 +160,9 @@ macro_rules! impl_has_scoped_expression_id {
         impl HasScopedAstId for $ty {
             type Id = ScopedExpressionId;
 
-            fn scoped_ast_id(
-                &self,
-                db: &dyn Db,
-                file: VfsFile,
-                file_scope: FileScopeId,
-            ) -> Self::Id {
+            fn scoped_ast_id(&self, db: &dyn Db, scope: ScopeId) -> Self::Id {
                 let expression_ref = ExpressionRef::from(self);
-                expression_ref.scoped_ast_id(db, file, file_scope)
+                expression_ref.scoped_ast_id(db, scope)
             }
         }
     };
@@ -207,8 +205,7 @@ impl_has_scoped_expression_id!(ast::Expr);
 impl HasScopedAstId for ast::ExpressionRef<'_> {
     type Id = ScopedExpressionId;
 
-    fn scoped_ast_id(&self, db: &dyn Db, file: VfsFile, file_scope: FileScopeId) -> Self::Id {
-        let scope = file_scope.to_scope_id(db, file);
+    fn scoped_ast_id(&self, db: &dyn Db, scope: ScopeId) -> Self::Id {
         let ast_ids = ast_ids(db, scope);
         ast_ids.expression_id(*self)
     }
@@ -231,13 +228,7 @@ macro_rules! impl_has_scoped_statement_id {
         impl HasScopedAstId for $ty {
             type Id = ScopedStatementId;
 
-            fn scoped_ast_id(
-                &self,
-                db: &dyn Db,
-                file: VfsFile,
-                file_scope: FileScopeId,
-            ) -> Self::Id {
-                let scope = file_scope.to_scope_id(db, file);
+            fn scoped_ast_id(&self, db: &dyn Db, scope: ScopeId) -> Self::Id {
                 let ast_ids = ast_ids(db, scope);
                 ast_ids.statement_id(self)
             }
@@ -262,8 +253,7 @@ pub struct ScopedFunctionId(pub(super) ScopedStatementId);
 impl HasScopedAstId for ast::StmtFunctionDef {
     type Id = ScopedFunctionId;
 
-    fn scoped_ast_id(&self, db: &dyn Db, file: VfsFile, file_scope: FileScopeId) -> Self::Id {
-        let scope = file_scope.to_scope_id(db, file);
+    fn scoped_ast_id(&self, db: &dyn Db, scope: ScopeId) -> Self::Id {
         let ast_ids = ast_ids(db, scope);
         ScopedFunctionId(ast_ids.statement_id(self))
     }
@@ -283,8 +273,7 @@ pub struct ScopedClassId(pub(super) ScopedStatementId);
 impl HasScopedAstId for ast::StmtClassDef {
     type Id = ScopedClassId;
 
-    fn scoped_ast_id(&self, db: &dyn Db, file: VfsFile, file_scope: FileScopeId) -> Self::Id {
-        let scope = file_scope.to_scope_id(db, file);
+    fn scoped_ast_id(&self, db: &dyn Db, scope: ScopeId) -> Self::Id {
         let ast_ids = ast_ids(db, scope);
         ScopedClassId(ast_ids.statement_id(self))
     }

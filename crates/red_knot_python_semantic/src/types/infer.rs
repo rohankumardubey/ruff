@@ -12,8 +12,8 @@ use ruff_python_ast::{ExprContext, TypeParams};
 use crate::name::Name;
 use crate::semantic_index::ast_ids::{HasScopedAstId, ScopedExpressionId};
 use crate::semantic_index::definition::{Definition, ImportDefinition, ImportFromDefinition};
-use crate::semantic_index::symbol::{FileScopeId, ScopeId, ScopeKind, ScopedSymbolId, SymbolTable};
-use crate::semantic_index::{symbol_table, ChildrenIter, SemanticIndex};
+use crate::semantic_index::symbol::{FileScopeId, ScopeId, ScopedSymbolId, SymbolTable};
+use crate::semantic_index::{symbol_table, SemanticIndex};
 use crate::types::{
     infer_types, ClassType, FunctionType, IntersectionType, ModuleType, ScopedClassTypeId,
     ScopedFunctionTypeId, ScopedIntersectionTypeId, ScopedUnionTypeId, Type, TypeId, TypingContext,
@@ -105,7 +105,6 @@ pub(super) struct TypeInferenceBuilder<'a> {
 
     /// The type inference results
     types: TypeInference<'a>,
-    children_scopes: ChildrenIter<'a>,
 }
 
 impl<'db> TypeInferenceBuilder<'db> {
@@ -113,7 +112,6 @@ impl<'db> TypeInferenceBuilder<'db> {
     pub(super) fn new(db: &'db dyn Db, scope: ScopeId<'db>, index: &'db SemanticIndex) -> Self {
         let file_scope_id = scope.file_scope_id(db);
         let file = scope.file(db);
-        let children_scopes = index.child_scopes(file_scope_id);
         let symbol_table = index.symbol_table(file_scope_id);
 
         Self {
@@ -125,7 +123,6 @@ impl<'db> TypeInferenceBuilder<'db> {
 
             db,
             types: TypeInference::default(),
-            children_scopes,
         }
     }
 
@@ -192,7 +189,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             decorator_list,
         } = function;
 
-        let function_id = function.scoped_ast_id(self.db, self.file_id, self.file_scope_id);
+        let function_id = function.scoped_ast_id(self.db, self.scope);
         let decorator_tys = decorator_list
             .iter()
             .map(|decorator| self.infer_decorator(decorator))
@@ -209,14 +206,6 @@ impl<'db> TypeInferenceBuilder<'db> {
             decorators: decorator_tys,
         });
 
-        // Skip over the function or type params child scope.
-        let (_, scope) = self.children_scopes.next().unwrap();
-
-        assert!(matches!(
-            scope.kind(),
-            ScopeKind::Function | ScopeKind::Annotation
-        ));
-
         self.types
             .definition_tys
             .insert(Definition::FunctionDef(function_id), function_ty);
@@ -226,13 +215,13 @@ impl<'db> TypeInferenceBuilder<'db> {
         let ast::StmtClassDef {
             range: _,
             name,
-            type_params,
+            type_params: _,
             decorator_list,
             arguments,
             body: _,
         } = class;
 
-        let class_id = class.scoped_ast_id(self.db, self.file_id, self.file_scope_id);
+        let class_id = class.scoped_ast_id(self.db, self.scope);
 
         for decorator in decorator_list {
             self.infer_decorator(decorator);
@@ -243,21 +232,12 @@ impl<'db> TypeInferenceBuilder<'db> {
             .map(|arguments| self.infer_arguments(arguments))
             .unwrap_or(Vec::new());
 
-        // If the class has type parameters, then the class body scope is the first child scope of the type parameter's scope
-        // Otherwise the next scope must be the class definition scope.
-        let (class_body_scope_id, class_body_scope) = if type_params.is_some() {
-            let (type_params_scope, _) = self.children_scopes.next().unwrap();
-            self.index.child_scopes(type_params_scope).next().unwrap()
-        } else {
-            self.children_scopes.next().unwrap()
-        };
-
-        assert_eq!(class_body_scope.kind(), ScopeKind::Class);
+        let body_scope = self.index.node_scope(class);
 
         let class_ty = self.class_ty(ClassType {
             name: Name::new(name),
             bases,
-            body_scope: class_body_scope_id.to_scope_id(self.db, self.file_id),
+            body_scope: body_scope.to_scope_id(self.db, self.file_id),
         });
 
         self.types
@@ -304,7 +284,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             self.infer_expression(target);
         }
 
-        let assign_id = assignment.scoped_ast_id(self.db, self.file_id, self.file_scope_id);
+        let assign_id = assignment.scoped_ast_id(self.db, self.scope);
 
         // TODO: Handle multiple targets.
         self.types
@@ -329,11 +309,7 @@ impl<'db> TypeInferenceBuilder<'db> {
         self.infer_expression(target);
 
         self.types.definition_tys.insert(
-            Definition::AnnotatedAssignment(assignment.scoped_ast_id(
-                self.db,
-                self.file_id,
-                self.file_scope_id,
-            )),
+            Definition::AnnotatedAssignment(assignment.scoped_ast_id(self.db, self.scope)),
             annotation_ty,
         );
     }
@@ -357,7 +333,7 @@ impl<'db> TypeInferenceBuilder<'db> {
     fn infer_import_statement(&mut self, import: &ast::StmtImport) {
         let ast::StmtImport { range: _, names } = import;
 
-        let import_id = import.scoped_ast_id(self.db, self.file_id, self.file_scope_id);
+        let import_id = import.scoped_ast_id(self.db, self.scope);
 
         for (i, alias) in names.iter().enumerate() {
             let ast::Alias {
@@ -390,7 +366,7 @@ impl<'db> TypeInferenceBuilder<'db> {
             level: _,
         } = import;
 
-        let import_id = import.scoped_ast_id(self.db, self.file_id, self.file_scope_id);
+        let import_id = import.scoped_ast_id(self.db, self.scope);
         let module_name = ModuleName::new(module.as_deref().expect("Support relative imports"));
 
         let module =
@@ -493,7 +469,7 @@ impl<'db> TypeInferenceBuilder<'db> {
         self.infer_expression(target);
 
         self.types.definition_tys.insert(
-            Definition::NamedExpr(named.scoped_ast_id(self.db, self.file_id, self.file_scope_id)),
+            Definition::NamedExpr(named.scoped_ast_id(self.db, self.scope)),
             value_ty,
         );
 
